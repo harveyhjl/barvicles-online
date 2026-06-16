@@ -6,50 +6,77 @@ import "./style.css";
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
 const socket = io(SERVER_URL, { transports: ["websocket", "polling"] });
 
-function playTone(type = "turn") {
-  // Tiny built-in sound effect using the Web Audio API.
-  // No sound files needed. Browser may block sound until user clicks once.
-  try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext) return;
+let sharedAudioContext = null;
 
-    const ctx = new AudioContext();
+function getAudioContext() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return null;
+  if (!sharedAudioContext) sharedAudioContext = new AudioContext();
+  return sharedAudioContext;
+}
+
+async function unlockAudio() {
+  // Browsers block audio until the user clicks/taps once.
+  // This resumes the audio context and plays a tiny silent sound to unlock it.
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return false;
+    if (ctx.state === "suspended") await ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.03);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function playTone(type = "turn") {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    if (ctx.state === "suspended") {
+      await ctx.resume();
+    }
+
+    const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
-    const now = ctx.currentTime;
-
     if (type === "yourTurn") {
-      osc.frequency.setValueAtTime(660, now);
-      osc.frequency.setValueAtTime(880, now + 0.08);
+      osc.frequency.setValueAtTime(740, now);
+      osc.frequency.setValueAtTime(980, now + 0.08);
     } else if (type === "theirTurn") {
-      osc.frequency.setValueAtTime(330, now);
-      osc.frequency.setValueAtTime(260, now + 0.08);
+      osc.frequency.setValueAtTime(360, now);
+      osc.frequency.setValueAtTime(280, now + 0.08);
     } else if (type === "win") {
       osc.frequency.setValueAtTime(523, now);
       osc.frequency.setValueAtTime(659, now + 0.08);
       osc.frequency.setValueAtTime(784, now + 0.16);
     } else {
-      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.setValueAtTime(800, now + 0.08);
     }
 
-    osc.type = "sine";
+    osc.type = "square";
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
-
     osc.start(now);
     osc.stop(now + 0.3);
-
-    osc.onended = () => ctx.close();
   } catch {
-    // Sound failure should never break the game.
+    // Never break the game because of sound.
   }
 }
-
 
 function suitColour(suit) {
   return suit === "♥" || suit === "♦" ? "red" : "black";
@@ -78,6 +105,7 @@ function App() {
   const [soundOn, setSoundOn] = useState(localStorage.getItem("barviclesSound") !== "off");
   const [previousTurn, setPreviousTurn] = useState(null);
   const [previousWinner, setPreviousWinner] = useState(null);
+  const [audioReady, setAudioReady] = useState(false);
 
   React.useEffect(() => {
     socket.on("state", (s) => {
@@ -134,12 +162,24 @@ function App() {
     setError("");
   }
 
-  function toggleSound() {
+  async function toggleSound() {
     const next = !soundOn;
     setSoundOn(next);
     localStorage.setItem("barviclesSound", next ? "on" : "off");
-    if (next) playTone("yourTurn");
+
+    if (next) {
+      const ok = await unlockAudio();
+      setAudioReady(ok);
+      await playTone("yourTurn");
+    }
   }
+
+  async function testSound() {
+    const ok = await unlockAudio();
+    setAudioReady(ok);
+    await playTone("yourTurn");
+  }
+
 
   function emit(action, payload) {
     setError("");
@@ -223,6 +263,9 @@ function App() {
           </div>
           <p className="hint">Server: {SERVER_URL}</p>
           <button className="secondary" onClick={toggleSound}>{soundOn ? "Sound on" : "Sound off"}</button>
+          <button className="secondary" onClick={testSound}>Test sound</button>
+          <button className="secondary" onClick={testSound}>Test sound</button>
+          <span className="badge">Audio: {audioReady ? "ready" : "click Test sound"}</span>
         </div>
       )}
 

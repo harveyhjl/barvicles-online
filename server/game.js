@@ -396,6 +396,22 @@ export function playCards(code, playerId, cardIds, chosenSuit, saidBarvicles) {
       room.pendingRank = null;
       room.log.push(`${player.name} noped the pickup chain.`);
     }
+  } else if (first.rank === "5") {
+    // 5 rule: if a King is on top of the pile, playing a 5 lets you pick that King up.
+    // The 5 stays as the new top card.
+    const kingIndex = room.discard.length - 2;
+    const kingCard = room.discard[kingIndex];
+
+    if (kingCard?.rank === "K") {
+      room.discard.splice(kingIndex, 1);
+      player.hand.push(kingCard);
+      room.currentSuit = top(room).suit;
+      room.log.push(`${player.name} used 5 to pick up ${kingCard.rank}${kingCard.suit} from the top of the pile.`);
+    } else {
+      room.log.push(`${player.name} played 5, but there was no King underneath to pick up.`);
+    }
+
+    clearNopeMemory(room);
   } else if (first.rank === "2") {
     room.pendingDraw += 2;
     room.pendingRank = "2";
