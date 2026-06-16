@@ -1,32 +1,45 @@
-# Barvicles Online
+# Barvicles Online v2
 
-A simple two-player online card game prototype for **Barvicles**.
+## Implemented rules
 
-## What it includes
+### Setup
 
-- Online rooms using Socket.IO
-- 11-card deal
-- Pickup pile and discard pile
-- UI showing your hand, top card, opponent card count, whose turn it is
-- Rule logic for:
-  - Match suit or rank
-  - Must play if you can
-  - Pickup ends your turn
-  - Ace = wild, choose suit
-  - 2 = pickup 2, stackable
-  - 4 = pickup 4, stackable
-  - 7 = skip
-  - 10 = nope/cancel pickup chain
-  - Jack = swap hands
-  - Queen = dump up to 3 extra cards immediately
-  - Barvicles call required on last card, penalty draw 1 if missed
+- 11 cards each.
+- One card face up starts the discard pile.
+- The rest is the pickup pile.
+- You must play if you can.
+- If you pick up, your turn ends.
+- Call **Barvicles** when you are on your last card.
+- Forgetting Barvicles means pick up 1.
+
+### Card rules
+
+| Card | Rule |
+|---|---|
+| A | Wildcard. Change suit. |
+| 2 | Pick up 2. Stackable. |
+| 3 | Randomly steal one card from the other player. |
+| 4 | Pick up 4. Stackable. |
+| 5 | House rule noted: pick up a King that has been put down. Not coded yet. |
+| 6 / 9 | Chaos chain. If the top card is 6, either player can play a 9. If the top card is 9, either player can play a 6. Whoever clicks fastest gets it down. |
+| 7 | Miss a go. In two-player mode, the same player gets another turn. |
+| 8 | Take a random card from the other player. |
+| 10 | Nope. Cancels pickup chains. Can nope a nope. Cannot nope 3 Kings. |
+| J | Swap hands. If Jack is your last card, you still swap, so the opponent receives your empty hand and wins. |
+| Q | Play Queen and dump up to 3 extra cards on top. The final dumped card becomes the new top card. |
+| K | Playing 3 Kings together instantly wins. Cannot be noped. |
+
+## Extra app features
+
+- Restart game button.
+- Score tracker for the room.
+- Reset browser button for stale saved-room bugs.
+- 6/9 chaos can be played even when it is not technically your turn.
 
 ## Run locally
 
-Install Node.js first.
-
 ```bash
-cd barvicles-online
+cd barvicles-online-v2
 npm run install-all
 npm run dev
 ```
@@ -37,23 +50,55 @@ Open:
 http://localhost:5173
 ```
 
-One player creates a room. The other joins with the room code.
+## Replace your current version
 
-## Make it playable online
+Copy these files/folders over your current project:
 
-The quickest setup:
-
-1. Put this project in a GitHub repo.
-2. Deploy `server/` to Render, Railway, Fly.io, or a cheap VPS.
-3. Deploy `client/` to Vercel or Netlify.
-4. Set the client environment variable:
-
-```bash
-VITE_SERVER_URL=https://your-server-url
+```text
+package.json
+README.md
+server/index.js
+server/game.js
+client/index.html
+client/package.json
+client/src/App.jsx
+client/src/style.css
 ```
 
-Then rebuild/redeploy the client.
+Then commit and push:
 
-## Important
+```bash
+git add .
+git commit -m "Update Barvicles rules, restart button, and scores"
+git push
+```
 
-I had to infer some Barvicles rules from the chat. Edit `server/game.js` if your house rules differ.
+Render and Netlify should redeploy automatically.
+
+If Netlify does not update:
+
+```text
+Deploys → Trigger deploy → Clear cache and deploy site
+```
+
+If Render does not update:
+
+```text
+Manual Deploy → Clear build cache & deploy
+```
+
+## Deployment reminder
+
+Render server root directory is probably:
+
+```text
+barvicles-online/server
+```
+
+Netlify client base directory is probably:
+
+```text
+barvicles-online/client
+```
+
+because your GitHub repo looked nested earlier.

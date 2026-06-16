@@ -6,6 +6,7 @@ import {
   createRoom,
   joinRoom,
   startGame,
+  restartGame,
   playCards,
   drawCard,
   callBarvicles,
@@ -18,9 +19,7 @@ app.use(cors());
 app.get("/", (_, res) => res.send("Barvicles server running"));
 
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" }
-});
+const io = new Server(server, { cors: { origin: "*" } });
 
 function emitRoom(roomCode) {
   const room = rooms.get(roomCode);
@@ -44,10 +43,11 @@ io.on("connection", (socket) => {
 
   socket.on("joinRoom", ({ roomCode, name }, cb) => {
     try {
-      const playerId = joinRoom(roomCode.toUpperCase(), socket.id, name || "Player 2");
-      socket.join(roomCode.toUpperCase());
-      cb({ ok: true, roomCode: roomCode.toUpperCase(), playerId });
-      emitRoom(roomCode.toUpperCase());
+      const cleanCode = roomCode.toUpperCase().trim();
+      const playerId = joinRoom(cleanCode, socket.id, name || "Player 2");
+      socket.join(cleanCode);
+      cb({ ok: true, roomCode: cleanCode, playerId });
+      emitRoom(cleanCode);
     } catch (err) {
       cb({ ok: false, error: err.message });
     }
@@ -56,6 +56,16 @@ io.on("connection", (socket) => {
   socket.on("startGame", ({ roomCode }, cb) => {
     try {
       startGame(roomCode);
+      cb({ ok: true });
+      emitRoom(roomCode);
+    } catch (err) {
+      cb({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on("restartGame", ({ roomCode }, cb) => {
+    try {
+      restartGame(roomCode);
       cb({ ok: true });
       emitRoom(roomCode);
     } catch (err) {

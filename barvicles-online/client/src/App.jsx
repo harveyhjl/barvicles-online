@@ -4,7 +4,7 @@ import { io } from "socket.io-client";
 import "./style.css";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
-const socket = io(SERVER_URL);
+const socket = io(SERVER_URL, { transports: ["websocket", "polling"] });
 
 function suitColour(suit) {
   return suit === "♥" || suit === "♦" ? "red" : "black";
@@ -36,7 +36,13 @@ function App() {
       setState(s);
       setError("");
     });
-    return () => socket.off("state");
+    socket.on("connect_error", (err) => {
+      setError(`Could not connect to server: ${err.message}`);
+    });
+    return () => {
+      socket.off("state");
+      socket.off("connect_error");
+    };
   }, []);
 
   const selectedCards = useMemo(() => {
@@ -52,6 +58,17 @@ function App() {
     setPlayerId(pid);
   }
 
+  function clearLocal() {
+    localStorage.removeItem("barviclesName");
+    localStorage.removeItem("barviclesRoom");
+    localStorage.removeItem("barviclesPlayer");
+    setRoomCode("");
+    setPlayerId("");
+    setState(null);
+    setSelected([]);
+    setError("");
+  }
+
   function emit(action, payload) {
     setError("");
     socket.emit(action, payload, (res) => {
@@ -61,15 +78,29 @@ function App() {
   }
 
   function createRoom() {
+    if (!name.trim()) {
+      setError("Type your name first.");
+      return;
+    }
     emit("createRoom", { name });
   }
 
   function joinRoom() {
+    if (!name.trim()) {
+      setError("Type your name first.");
+      return;
+    }
     emit("joinRoom", { roomCode: roomInput, name });
   }
 
   function startGame() {
     emit("startGame", { roomCode });
+  }
+
+  function restartGame() {
+    emit("restartGame", { roomCode });
+    setSelected([]);
+    setSaidBarvicles(false);
   }
 
   function toggleCard(cardId) {
@@ -97,7 +128,10 @@ function App() {
     emit("callBarvicles", { roomCode, playerId });
   }
 
-  const needsSuit = selectedCards[0]?.rank === "A";
+  const needsSuit = selectedCards.some(c => c.rank === "A");
+  const selectedHasQueen = selectedCards.some(c => c.rank === "Q");
+  const selectedThreeKings = selectedCards.length === 3 && selectedCards.every(c => c.rank === "K");
+  const selectedHasJack = selectedCards.some(c => c.rank === "J");
 
   return (
     <div className="app">
@@ -115,6 +149,7 @@ function App() {
             <input placeholder="Room code" value={roomInput} onChange={e => setRoomInput(e.target.value.toUpperCase())} />
             <button className="primary" onClick={joinRoom}>Join room</button>
           </div>
+          <p className="hint">Server: {SERVER_URL}</p>
         </div>
       )}
 
@@ -123,6 +158,9 @@ function App() {
           <span className="badge">Room: <b>{roomCode}</b></span>
           <span className="badge">Server: {SERVER_URL}</span>
           {state?.phase === "lobby" && <button className="primary" onClick={startGame}>Start game</button>}
+          {state?.phase === "finished" && <button className="primary" onClick={restartGame}>Restart game</button>}
+          {state?.phase === "playing" && <button className="secondary" onClick={restartGame}>Restart game</button>}
+          <button className="danger" onClick={clearLocal}>Reset browser</button>
         </div>
       )}
 
@@ -130,6 +168,15 @@ function App() {
 
       {state && (
         <>
+          <div className="panel">
+            <h2>Score</h2>
+            <div className="scoreboard">
+              {state.scores?.map(s => (
+                <div className="score" key={s.name}>{s.name}: {s.score}</div>
+              ))}
+            </div>
+          </div>
+
           <div className="panel table">
             <div>
               <h2>{state.opponent?.name || "Waiting for opponent"}</h2>
@@ -143,13 +190,16 @@ function App() {
               <PlayingCard card={state.topCard} />
               <p>Current suit: <b>{state.currentSuit}</b></p>
               {state.pendingDraw > 0 && <p className="danger badge">Pending pickup: {state.pendingDraw}</p>}
+              {(state.topCard?.rank === "6" || state.topCard?.rank === "9") && (
+                <p className="badge">6/9 CHAOS: fastest alternate card wins</p>
+              )}
               <p>Pickup pile: {state.pickupPileCount}</p>
             </div>
 
             <div>
               <h2>{state.you.name}</h2>
               <p>Your cards: <b>{state.you.cardCount}</b></p>
-              <p>Barvicles called: <b>{state.you.saidBarvicles ? "yes" : saidBarvicles ? "queued" : "no"}</b></p>
+              <p>Barvicles called: <b>{state.you.saidBarvicles || saidBarvicles ? "yes" : "no"}</b></p>
             </div>
           </div>
 
@@ -178,12 +228,16 @@ function App() {
                   </select>
                 </>
               )}
-              <button className="primary" disabled={!state.isYourTurn || !selected.length} onClick={play}>
+              <button className="primary" disabled={!selected.length} onClick={play}>
                 Play selected
               </button>
               <button disabled={!state.isYourTurn} onClick={draw}>Pick up</button>
               <button className="danger" onClick={callBarvicles}>Call Barvicles</button>
             </div>
+
+            {selectedHasQueen && <p className="hint">Queen: select Queen + up to 3 extra cards. Click order does not matter.</p>}
+            {selectedThreeKings && <p className="hint">3 Kings selected: instant win.</p>}
+            {selectedHasJack && <p className="hint">Warning: Jack always swaps hands. If it is your last card, opponent wins.</p>}
           </div>
 
           <div className="panel log">
@@ -191,6 +245,12 @@ function App() {
             {state.log.map((line, i) => <div key={i}>{line}</div>)}
           </div>
         </>
+      )}
+
+      {roomCode && !state && (
+        <div className="panel">
+          <p>Saved room found, but no game state loaded. Press Reset browser.</p>
+        </div>
       )}
     </div>
   );
