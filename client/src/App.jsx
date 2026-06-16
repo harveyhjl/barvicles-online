@@ -6,6 +6,51 @@ import "./style.css";
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
 const socket = io(SERVER_URL, { transports: ["websocket", "polling"] });
 
+function playTone(type = "turn") {
+  // Tiny built-in sound effect using the Web Audio API.
+  // No sound files needed. Browser may block sound until user clicks once.
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    const now = ctx.currentTime;
+
+    if (type === "yourTurn") {
+      osc.frequency.setValueAtTime(660, now);
+      osc.frequency.setValueAtTime(880, now + 0.08);
+    } else if (type === "theirTurn") {
+      osc.frequency.setValueAtTime(330, now);
+      osc.frequency.setValueAtTime(260, now + 0.08);
+    } else if (type === "win") {
+      osc.frequency.setValueAtTime(523, now);
+      osc.frequency.setValueAtTime(659, now + 0.08);
+      osc.frequency.setValueAtTime(784, now + 0.16);
+    } else {
+      osc.frequency.setValueAtTime(440, now);
+    }
+
+    osc.type = "sine";
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.18, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.3);
+
+    osc.onended = () => ctx.close();
+  } catch {
+    // Sound failure should never break the game.
+  }
+}
+
+
 function suitColour(suit) {
   return suit === "♥" || suit === "♦" ? "red" : "black";
 }
@@ -30,6 +75,9 @@ function App() {
   const [chosenSuit, setChosenSuit] = useState("♠");
   const [saidBarvicles, setSaidBarvicles] = useState(false);
   const [error, setError] = useState("");
+  const [soundOn, setSoundOn] = useState(localStorage.getItem("barviclesSound") !== "off");
+  const [previousTurn, setPreviousTurn] = useState(null);
+  const [previousWinner, setPreviousWinner] = useState(null);
 
   React.useEffect(() => {
     socket.on("state", (s) => {
@@ -44,6 +92,23 @@ function App() {
       socket.off("connect_error");
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!state || !soundOn) return;
+
+    const currentTurn = state.isYourTurn ? "you" : "them";
+
+    if (previousTurn !== null && previousTurn !== currentTurn && state.phase === "playing") {
+      playTone(state.isYourTurn ? "yourTurn" : "theirTurn");
+    }
+
+    if (state.winner && state.winner !== previousWinner) {
+      playTone("win");
+    }
+
+    setPreviousTurn(currentTurn);
+    setPreviousWinner(state.winner || null);
+  }, [state?.isYourTurn, state?.winner, state?.phase, soundOn]);
 
   const selectedCards = useMemo(() => {
     if (!state?.you?.hand) return [];
@@ -67,6 +132,13 @@ function App() {
     setState(null);
     setSelected([]);
     setError("");
+  }
+
+  function toggleSound() {
+    const next = !soundOn;
+    setSoundOn(next);
+    localStorage.setItem("barviclesSound", next ? "on" : "off");
+    if (next) playTone("yourTurn");
   }
 
   function emit(action, payload) {
@@ -150,6 +222,7 @@ function App() {
             <button className="primary" onClick={joinRoom}>Join room</button>
           </div>
           <p className="hint">Server: {SERVER_URL}</p>
+          <button className="secondary" onClick={toggleSound}>{soundOn ? "Sound on" : "Sound off"}</button>
         </div>
       )}
 
@@ -161,6 +234,7 @@ function App() {
           {state?.phase === "finished" && <button className="primary" onClick={restartGame}>Restart game</button>}
           {state?.phase === "playing" && <button className="secondary" onClick={restartGame}>Restart game</button>}
           <button className="danger" onClick={clearLocal}>Reset browser</button>
+          <button className="secondary" onClick={toggleSound}>{soundOn ? "Sound on" : "Sound off"}</button>
         </div>
       )}
 
