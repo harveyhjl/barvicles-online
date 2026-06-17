@@ -459,7 +459,7 @@ export function playCards(code, playerId, cardIds, chosenSuit, saidBarvicles) {
   player.saidBarvicles = !!saidBarvicles;
   room.log.push(`${player.name} played ${first.rank}${first.suit}.`);
 
-  if (first.rank === "10" && isNopeMove) {
+    if (first.rank === "10" && isNopeMove) {
     if (room.nopedTarget) {
       restoreSnapshot(room, room.nopedTarget.after);
       room.nopeTarget = room.nopedTarget;
@@ -473,14 +473,14 @@ export function playCards(code, playerId, cardIds, chosenSuit, saidBarvicles) {
       room.log.push(`${player.name} noped ${target.effectName}.`);
     }
 
-    // The 10 stays as the visible top card after the logic is restored.
-    room.discard.push(first);
-    room.currentSuit = first.suit;
+    // Important: restoring the snapshot puts the played 10 back in hand.
+    // Remove it again and put it on the discard pile. Played cards never return.
+    commitPlayedCardAfterRestore(player, room, first);
+
     room.turn = otherIndex(room, i);
     if (finishIfAnyPlayerHasNoCards(room)) return;
     return;
   }
-
   let skipNext = false;
   let specialApplied = false;
 
