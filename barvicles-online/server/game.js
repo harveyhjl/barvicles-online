@@ -168,8 +168,9 @@ function canPlayOn(card, room, playerId) {
   // During Queen dump, the Queen player can dump anything without powers.
   if (room.queenDump?.active && room.queenDump.playerId === playerId) return true;
 
-  // During Queen dump, anyone quick enough can use 5 to collect a King sitting on top.
-  if (room.queenDump?.active && canPickupKingWithFive(card, room)) return true;
+  // 5 can always pick up a King if a King is on top.
+  // This is allowed even when the 5 does not match suit/rank.
+  if (canPickupKingWithFive(card, room)) return true;
 
   // 6/9 chaos: only the required alternate rank may be played.
   if (room.sixNine?.active) return isSixNineChaosCard(card, room);
@@ -459,19 +460,35 @@ export function playCards(code, playerId, cardIds, chosenSuit, saidBarvicles) {
 
   if (first.rank === "10" && isNopeMove) {
     if (room.nopedTarget) {
-      restoreSnapshot(room, room.nopedTarget.after);
-      room.nopeTarget = room.nopedTarget;
+      const target = room.nopedTarget;
+
+      restoreSnapshot(room, target.after);
+      room.nopeTarget = target;
       room.nopedTarget = null;
       room.log.push(`${player.name} noped the nope. The game returns to how it was before the first nope.`);
+
+      // The first nope was already played, so it must not come back to hand
+      // when we restore the "after original effect" snapshot.
+      if (target.nopePlayerId && target.nopeCard) {
+        const originalNoper = room.players.find(p => p.id === target.nopePlayerId);
+        if (originalNoper) {
+          commitPlayedCardAfterRestore(originalNoper, room, target.nopeCard);
+        }
+      }
     } else if (room.nopeTarget) {
       const target = room.nopeTarget;
+
+      // Store the nope card/player so if the nope gets noped, this 10 stays played too.
+      target.nopePlayerId = player.id;
+      target.nopeCard = { ...first };
+
       restoreSnapshot(room, target.before);
       room.nopedTarget = target;
       room.nopeTarget = null;
       room.log.push(`${player.name} noped ${target.effectName}.`);
     }
 
-    // Important: restoring the snapshot puts the played 10 back in hand.
+    // Important: restoring the snapshot puts the currently played 10 back in hand.
     // Remove it again and put it on the discard pile. Played cards never return.
     commitPlayedCardAfterRestore(player, room, first);
 
