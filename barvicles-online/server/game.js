@@ -87,6 +87,16 @@ function restoreSnapshot(room, snap) {
   room.sixNine = snap.sixNine ? { ...snap.sixNine } : null;
 }
 
+function removeDiscardedCardsFromHands(room) {
+  // Critical Barvicles law:
+  // once a card is on the discard pile, it must never also be in anyone's hand.
+  // Snapshot restore can accidentally resurrect played cards, especially 10s.
+  const discardedIds = new Set(room.discard.map(c => c.id));
+  for (const p of room.players) {
+    p.hand = p.hand.filter(c => !discardedIds.has(c.id));
+  }
+}
+
 function clearNope(room) {
   room.nopeTarget = null;
   room.nopedTarget = null;
@@ -400,23 +410,27 @@ export function playCards(code, playerId, cardIds, chosenSuit, saidBarvicles) {
     return player.hand[idx];
   });
 
-  // Queen is now a staged move: play Queen first, then dump three cards separately.
-  if (cards.length > 1) {
-    throw new Error("Play one card at a time. Queen dump cards are played separately.");
-  }
+  const isThreeKingsWin = cards.length === 3 && cards.every(c => c.rank === "K");
 
-  const first = cards[0];
-  const isThreeKingsWin = cardIds.length === 3 && cards.every(c => c.rank === "K");
-  const isNopeMove = first.rank === "10" && canNope(first, room, playerId);
-  const isChaosMove = isSixNineChaosCard(first, room);
-  const isKingPickupMove = canPickupKingWithFive(first, room);
-
-  // Three Kings can be played together; this branch is kept for direct API safety.
+  // 3 Kings is the only normal multi-card play now.
+  // Queen dump is staged separately, but 3 Kings must still work.
   if (isThreeKingsWin) {
+    // Can be played regardless of whose turn it is, top card, suit, or pending effects.
+    // It cannot be noped.
     removeCardsFromHandToDiscard(player, room, cards);
     finishRound(room, i, `${player.name} played 3 Kings and wins the round.`);
     return;
   }
+
+  // Queen is now a staged move: play Queen first, then dump three cards separately.
+  if (cards.length > 1) {
+    throw new Error("Play one card at a time. Queen dump cards are played separately. Only 3 Kings can be played together.");
+  }
+
+  const first = cards[0];
+  const isNopeMove = first.rank === "10" && canNope(first, room, playerId);
+  const isChaosMove = isSixNineChaosCard(first, room);
+  const isKingPickupMove = canPickupKingWithFive(first, room);
 
   if (i !== room.turn && !isNopeMove && !isChaosMove && !isKingPickupMove) {
     throw new Error("Not your turn");
@@ -463,6 +477,7 @@ export function playCards(code, playerId, cardIds, chosenSuit, saidBarvicles) {
       const target = room.nopedTarget;
 
       restoreSnapshot(room, target.after);
+      removeDiscardedCardsFromHands(room);
       room.nopeTarget = target;
       room.nopedTarget = null;
       room.log.push(`${player.name} noped the nope. The game returns to how it was before the first nope.`);
@@ -483,6 +498,7 @@ export function playCards(code, playerId, cardIds, chosenSuit, saidBarvicles) {
       target.nopeCard = { ...first };
 
       restoreSnapshot(room, target.before);
+      removeDiscardedCardsFromHands(room);
       room.nopedTarget = target;
       room.nopeTarget = null;
       room.log.push(`${player.name} noped ${target.effectName}.`);
