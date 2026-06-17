@@ -288,6 +288,24 @@ function removeCardsFromHandToDiscard(player, room, cards) {
   }
 }
 
+function commitPlayedCardAfterRestore(player, room, playedCard) {
+  // Used after restoring a snapshot for nope logic.
+  // A played card must never return to the player's hand.
+  const idx = findCardIndex(player.hand, playedCard.id);
+  if (idx !== -1) {
+    const [realCard] = player.hand.splice(idx, 1);
+    room.discard.push(realCard);
+    room.currentSuit = realCard.suit;
+    return;
+  }
+
+  // Fallback: if the exact id is missing, still put the card on the pile.
+  room.discard.push(playedCard);
+  room.currentSuit = playedCard.suit;
+}
+
+}
+
 function pickupKingWithFive(room, player, cards) {
   if (cards.length !== 1 || cards[0].rank !== "5") return false;
   if (top(room)?.rank !== "K") return false;
