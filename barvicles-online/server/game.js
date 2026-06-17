@@ -304,8 +304,6 @@ function commitPlayedCardAfterRestore(player, room, playedCard) {
   room.currentSuit = playedCard.suit;
 }
 
-}
-
 function pickupKingWithFive(room, player, cards) {
   if (cards.length !== 1 || cards[0].rank !== "5") return false;
   if (top(room)?.rank !== "K") return false;
@@ -459,7 +457,7 @@ export function playCards(code, playerId, cardIds, chosenSuit, saidBarvicles) {
   player.saidBarvicles = !!saidBarvicles;
   room.log.push(`${player.name} played ${first.rank}${first.suit}.`);
 
-    if (first.rank === "10" && isNopeMove) {
+  if (first.rank === "10" && isNopeMove) {
     if (room.nopedTarget) {
       restoreSnapshot(room, room.nopedTarget.after);
       room.nopeTarget = room.nopedTarget;
@@ -481,6 +479,7 @@ export function playCards(code, playerId, cardIds, chosenSuit, saidBarvicles) {
     if (finishIfAnyPlayerHasNoCards(room)) return;
     return;
   }
+
   let skipNext = false;
   let specialApplied = false;
 
