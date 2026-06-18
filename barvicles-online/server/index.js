@@ -77,6 +77,16 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("addComputerPlayer", ({ roomCode }, cb) => {
+    try {
+      addComputerPlayer(roomCode);
+      cb({ ok: true });
+      emitRoom(roomCode);
+    } catch (err) {
+      cb({ ok: false, error: err.message });
+    }
+  });
+
   socket.on("startGame", ({ roomCode }, cb) => {
     try {
       startGame(roomCode);
