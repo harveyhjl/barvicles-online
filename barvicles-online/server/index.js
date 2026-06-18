@@ -69,10 +69,10 @@ function scheduleBotIfNeeded(roomCode) {
 io.on("connection", (socket) => {
   socket.on("createRoom", ({ name }, cb) => {
     try {
-      const { code, playerId } = createRoom(socket.id, name || "Player 1");
-      socket.join(code);
-      cb({ ok: true, roomCode: code, playerId });
-      emitRoom(code);
+      const { roomCode, playerId } = createRoom(socket.id, name || "Player 1");
+      socket.join(roomCode);
+      cb({ ok: true, roomCode, playerId });
+      emitRoom(roomCode);
     } catch (err) {
       cb({ ok: false, error: err.message });
     }
