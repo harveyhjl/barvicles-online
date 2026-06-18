@@ -14,9 +14,7 @@ import {
   updateRules,
   botTakeTurn,
   sendChat,
-  getPublicState,
-  disconnectPlayer
-} from "./game.js";
+  getPublicState} from "./game.js";
 
 const app = express();
 app.use(cors());
