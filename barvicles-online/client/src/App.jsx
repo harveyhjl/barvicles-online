@@ -243,6 +243,10 @@ function App() {
     emit("joinRoom", { roomCode: roomInput, name });
   }
 
+  function addComputerPlayer() {
+    emit("addComputerPlayer", { roomCode });
+  }
+
   function startGame() {
     emit("startGame", { roomCode });
   }
@@ -321,6 +325,7 @@ function App() {
         <div className="panel row">
           <span className="badge">Room: <b>{roomCode}</b></span>
           <span className="badge">Server: {SERVER_URL}</span>
+          {state?.phase === "lobby" && !state?.opponent && <button className="secondary" onClick={addComputerPlayer}>Play vs Computer</button>}
           {state?.phase === "lobby" && <button className="primary" onClick={startGame}>Start game</button>}
           {state?.phase === "finished" && <button className="primary" onClick={restartGame}>Restart game</button>}
           {state?.phase === "playing" && <button className="secondary" onClick={restartGame}>Restart game</button>}
@@ -364,9 +369,9 @@ function App() {
 
           <div className="panel table">
             <div>
-              <h2>{state.opponent?.name || "Waiting for opponent"}</h2>
+              <h2>{state.opponent?.name || "Waiting for opponent"} {state.opponent?.isBot ? "🤖" : ""}</h2>
               <p>Cards: <b>{state.opponent?.cardCount ?? 0}</b></p>
-              <p>{state.opponent?.connected === false ? "Disconnected" : "Connected"}</p>
+              <p>{state.opponent?.isBot ? "Computer player" : state.opponent?.connected === false ? "Disconnected" : "Connected"}</p>
             </div>
 
             <div className="center">

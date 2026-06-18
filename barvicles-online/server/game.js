@@ -386,7 +386,7 @@ export function createRoom(socketId, name) {
   rooms.set(code, {
     code,
     phase: "lobby",
-    players: [{ id: playerId, socketId, name, hand: [], connected: true, saidBarvicles: false }],
+    players: [{ id: playerId, socketId, name, hand: [], connected: true, saidBarvicles: false, isBot: false }],
     deck: [],
     discard: [],
     currentSuit: null,
@@ -414,9 +414,30 @@ export function joinRoom(code, socketId, name) {
   if (room.players.length >= 2) throw new Error("Room full");
 
   const playerId = id();
-  room.players.push({ id: playerId, socketId, name, hand: [], connected: true, saidBarvicles: false });
+  room.players.push({ id: playerId, socketId, name, hand: [], connected: true, saidBarvicles: false, isBot: false });
   room.scores[playerId] = { rounds: 0, sets: 0 };
   room.log.push(`${name} joined.`);
+  return playerId;
+}
+
+
+export function addComputerPlayer(code) {
+  const room = rooms.get(code);
+  if (!room) throw new Error("Room not found");
+  if (room.players.length >= 2) throw new Error("Room full");
+
+  const playerId = `bot-${id()}`;
+  room.players.push({
+    id: playerId,
+    socketId: `bot-${code}`,
+    name: "BarvBot",
+    hand: [],
+    connected: true,
+    saidBarvicles: false,
+    isBot: true
+  });
+  room.scores[playerId] = { rounds: 0, sets: 0 };
+  room.log.push(`BarvBot joined.`);
   return playerId;
 }
 
@@ -721,6 +742,81 @@ export function updateRules(code, rulesPatch) {
   room.log.push(`Rules updated.`);
 }
 
+
+function chooseSuitFromHand(hand) {
+  const counts = { "♠": 0, "♥": 0, "♦": 0, "♣": 0 };
+  for (const c of hand) if (counts[c.suit] !== undefined) counts[c.suit] += 1;
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+function scoreBotCard(card, room, bot) {
+  if (card.rank === "10" && canNope(card, room, bot.id)) return 100;
+  if (room.pendingDraw > 0 && card.rank === room.pendingRank) return 95;
+  if (card.rank === "5" && canPickupKingWithFive(card, room)) return 90;
+  if (card.rank === "3" && ruleOn(room, "steal3")) return 80;
+  if (card.rank === "7" && ruleOn(room, "skip7")) return 70;
+  if (card.rank === "2" && ruleOn(room, "pickup2")) return 65;
+  if (card.rank === "4" && ruleOn(room, "pickup4")) return 64;
+  if (card.rank === "A" && ruleOn(room, "ace")) return 50;
+  if (card.rank === "Q" && ruleOn(room, "queenDump")) return 45;
+  if (card.rank === "J" && ruleOn(room, "jackSwap")) return 20;
+  if (card.rank === "8" && ruleOn(room, "give8")) return 5;
+  return 30;
+}
+
+function chooseBotMove(room, botIndex) {
+  const bot = room.players[botIndex];
+
+  const kings = bot.hand.filter(c => c.rank === "K");
+  if (ruleOn(room, "threeKings") && kings.length >= 3) {
+    return { type: "play", cardIds: kings.slice(0, 3).map(c => c.id), chosenSuit: "♠", saidBarvicles: bot.hand.length === 3 };
+  }
+
+  let playable = bot.hand.filter(c => canPlayOn(c, room, bot.id));
+
+  if (room.queenDump?.active && room.queenDump.playerId === bot.id) {
+    const dumpables = [...playable].sort((a, b) => {
+      const penalty = r => r === "K" ? 100 : ["10", "A", "2", "4", "3", "7"].includes(r) ? 20 : 0;
+      return penalty(a.rank) - penalty(b.rank);
+    });
+    if (dumpables[0]) return { type: "play", cardIds: [dumpables[0].id], chosenSuit: dumpables[0].suit, saidBarvicles: bot.hand.length === 1 };
+  }
+
+  if (playable.length === 0) return { type: "draw" };
+
+  playable = playable.sort((a, b) => scoreBotCard(b, room, bot) - scoreBotCard(a, room, bot));
+  const chosen = playable[0];
+
+  return {
+    type: "play",
+    cardIds: [chosen.id],
+    chosenSuit: chosen.rank === "A" ? chooseSuitFromHand(bot.hand) : chosen.suit,
+    saidBarvicles: bot.hand.length === 1
+  };
+}
+
+export function botTakeTurn(code) {
+  const room = rooms.get(code);
+  if (!room) throw new Error("Room not found");
+  if (room.phase !== "playing") return false;
+
+  normalizeGameState(room);
+
+  const botIndex = room.players.findIndex(p => p.isBot && p.id === room.players[room.turn]?.id);
+  if (botIndex === -1) return false;
+
+  const bot = room.players[botIndex];
+  const move = chooseBotMove(room, botIndex);
+
+  if (move.type === "draw") {
+    drawCard(code, bot.id);
+    return true;
+  }
+
+  playCards(code, bot.id, move.cardIds, move.chosenSuit, move.saidBarvicles);
+  return true;
+}
+
 export function getPublicState(code, playerId) {
   const room = rooms.get(code);
   if (!room) throw new Error("Room not found");
@@ -741,6 +837,7 @@ export function getPublicState(code, playerId) {
       hand: me.hand,
       cardCount: me.hand.length,
       saidBarvicles: me.saidBarvicles,
+      isBot: !!me.isBot,
       score: room.scores[me.id]?.rounds || 0,
       rounds: room.scores[me.id]?.rounds || 0,
       sets: room.scores[me.id]?.sets || 0
@@ -749,6 +846,7 @@ export function getPublicState(code, playerId) {
       name: opp.name,
       cardCount: opp.hand.length,
       connected: opp.connected,
+      isBot: !!opp.isBot,
       score: room.scores[opp.id]?.rounds || 0,
       rounds: room.scores[opp.id]?.rounds || 0,
       sets: room.scores[opp.id]?.sets || 0

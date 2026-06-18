@@ -1,4 +1,4 @@
-# Barvicles Online v18
+# Barvicles Online v19
 
 ## Major rule updates in v11
 
@@ -124,3 +124,28 @@ README.md
 ```
 
 Render must redeploy for server rule fixes. Netlify must redeploy for toggles and colour.
+
+
+## v19 update
+
+- Added **Play vs Computer** button in the lobby.
+- If no second player joins, the room creator can add **BarvBot**.
+- BarvBot plays automatically after a short delay.
+- Bot logic is simple:
+  - wins with 3 Kings if possible
+  - nopes/stacks pickup chains if possible
+  - chooses Ace suit based on its hand
+  - dumps Queen cards one by one
+  - otherwise plays the best available card or picks up
+
+## Files to update
+
+```text
+server/game.js
+server/index.js
+client/src/App.jsx
+README.md
+```
+
+Render must redeploy for bot logic.
+Netlify must redeploy for the Play vs Computer button.

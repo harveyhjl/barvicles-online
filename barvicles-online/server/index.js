@@ -5,12 +5,14 @@ import { Server } from "socket.io";
 import {
   createRoom,
   joinRoom,
+  addComputerPlayer,
   startGame,
   restartGame,
   playCards,
   drawCard,
   callBarvicles,
   updateRules,
+  botTakeTurn,
   getPublicState,
   rooms
 } from "./game.js";
@@ -28,6 +30,27 @@ function emitRoom(roomCode) {
   for (const p of room.players) {
     io.to(p.socketId).emit("state", getPublicState(roomCode, p.id));
   }
+}
+
+function scheduleBotIfNeeded(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room || room.phase !== "playing") return;
+
+  const current = room.players[room.turn];
+  if (!current?.isBot) return;
+
+  setTimeout(() => {
+    try {
+      const moved = botTakeTurn(roomCode);
+      if (moved) {
+        emitRoom(roomCode);
+        scheduleBotIfNeeded(roomCode);
+      }
+    } catch (err) {
+      room.log.push(`BarvBot error: ${err.message}`);
+      emitRoom(roomCode);
+    }
+  }, 700);
 }
 
 io.on("connection", (socket) => {
@@ -59,6 +82,7 @@ io.on("connection", (socket) => {
       startGame(roomCode);
       cb({ ok: true });
       emitRoom(roomCode);
+      scheduleBotIfNeeded(roomCode);
     } catch (err) {
       cb({ ok: false, error: err.message });
     }
@@ -69,6 +93,7 @@ io.on("connection", (socket) => {
       restartGame(roomCode);
       cb({ ok: true });
       emitRoom(roomCode);
+      scheduleBotIfNeeded(roomCode);
     } catch (err) {
       cb({ ok: false, error: err.message });
     }
@@ -79,6 +104,7 @@ io.on("connection", (socket) => {
       playCards(roomCode, playerId, cardIds, chosenSuit, !!saidBarvicles);
       cb({ ok: true });
       emitRoom(roomCode);
+      scheduleBotIfNeeded(roomCode);
     } catch (err) {
       cb({ ok: false, error: err.message });
     }
@@ -89,6 +115,7 @@ io.on("connection", (socket) => {
       drawCard(roomCode, playerId);
       cb({ ok: true });
       emitRoom(roomCode);
+      scheduleBotIfNeeded(roomCode);
     } catch (err) {
       cb({ ok: false, error: err.message });
     }
